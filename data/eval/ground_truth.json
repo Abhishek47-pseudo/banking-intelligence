@@ -1,0 +1,42 @@
+[
+    {
+        "client_id":  "C100",
+        "expected_products":  [
+                                  "forex_card",
+                                  "credit_card",
+                                  "mutual_fund"
+                              ]
+    },
+    {
+        "client_id":  "C101",
+        "expected_products":  [
+                                  "home_loan",
+                                  "insurance",
+                                  "mutual_fund"
+                              ]
+    },
+    {
+        "client_id":  "C102",
+        "expected_products":  [
+                                  "credit_card",
+                                  "forex_card",
+                                  "personal_loan"
+                              ]
+    },
+    {
+        "client_id":  "C103",
+        "expected_products":  [
+                                  "fd",
+                                  "insurance",
+                                  "mutual_fund"
+                              ]
+    },
+    {
+        "client_id":  "C104",
+        "expected_products":  [
+                                  "credit_card",
+                                  "home_loan",
+                                  "insurance"
+                              ]
+    }
+]

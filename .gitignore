@@ -1,0 +1,58 @@
+# --- Secrets / local env ---
+.env
+.env.*
+!.env.example
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.pkl
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+dist/
+build/
+*.egg-info/
+.venv/
+venv/
+ENV/
+
+# --- Jupyter / notebooks ---
+.ipynb_checkpoints/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# --- Databases ---
+*.db
+
+# --- Node / frontend ---
+node_modules/
+pnpm-lock.yaml
+yarn.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npmrc
+.next/
+out/
+build/
+dist/
+
+# --- Local data/artifacts (keep sample data tracked) ---
+data/**/raw/
+data/**/processed/
+data/**/exports/
+

@@ -1,0 +1,21 @@
+client_id,name,dob,phone,email,city,pin,income_band,risk_profile,age_band,tenure_years,products_held,last_updated
+C100,Client C100,1981-05-07,+919886705466,c100@email.com,Surat,443937,high,conservative,26-35,4,"[""fd""]",2020-09-01
+C101,Client C101,1967-10-03,+918499396420,c101@email.com,Ahmedabad,533391,ultra-high,moderate,36-45,19,"[""savings_account"", ""forex_card""]",2022-01-01
+C102,Client C102,1963-01-05,+918994012487,c102@email.com,Kolkata,270522,high,aggressive,46-55,16,"[""personal_loan"", ""debit_card"", ""savings_account"", ""mutual_fund""]",2023-09-01
+C103,Client C103,1979-02-14,+918492753399,c103@email.com,Kolkata,472088,low,moderate,36-45,2,"[""personal_loan"", ""debit_card"", ""insurance"", ""home_loan""]",2021-07-01
+C104,Client C104,1975-06-11,+917855470916,c104@email.com,Mumbai,418734,ultra-high,moderate,55+,14,"[""fd""]",2021-08-01
+C105,Client C105,1965-02-21,+918537999481,c105@email.com,Bangalore,408483,ultra-high,conservative,36-45,7,"[""debit_card"", ""insurance""]",2024-11-01
+C106,Client C106,1997-08-24,+918580577351,c106@email.com,Pune,167736,mid,aggressive,26-35,15,"[""mutual_fund""]",2020-03-01
+C107,Client C107,1965-06-20,+919666165047,c107@email.com,Jaipur,550662,high,aggressive,46-55,12,"[""home_loan"", ""fd"", ""forex_card"", ""credit_card""]",2022-09-01
+C108,Client C108,1979-06-25,+917950934321,c108@email.com,Hyderabad,481740,high,conservative,36-45,20,"[""fd"", ""insurance"", ""credit_card""]",2022-05-01
+C109,Client C109,1996-10-19,+918041349425,c109@email.com,Hyderabad,254593,ultra-high,moderate,26-35,19,"[""fd""]",2021-10-01
+C110,Client C110,1993-11-27,+917627512534,c110@email.com,Chennai,135032,high,aggressive,46-55,5,"[""fd"", ""personal_loan"", ""savings_account""]",2024-03-01
+C111,Client C111,1970-02-01,+917554432010,c111@email.com,Mumbai,472426,mid,conservative,46-55,2,"[""home_loan"", ""personal_loan"", ""savings_account"", ""credit_card""]",2024-08-01
+C112,Client C112,1982-04-10,+918446021531,c112@email.com,Ahmedabad,529616,mid,conservative,18-25,8,"[""mutual_fund"", ""personal_loan"", ""fd"", ""debit_card""]",2023-06-01
+C113,Client C113,1979-05-19,+918638536237,c113@email.com,Delhi,187795,mid,aggressive,18-25,1,"[""savings_account""]",2023-05-01
+C114,Client C114,1968-02-07,+918689993629,c114@email.com,Pune,387226,ultra-high,conservative,36-45,19,"[""mutual_fund"", ""credit_card""]",2023-06-01
+C115,Client C115,1987-02-19,+917295426456,c115@email.com,Hyderabad,480052,high,aggressive,36-45,7,"[""debit_card"", ""savings_account"", ""personal_loan""]",2024-04-01
+C116,Client C116,1974-02-03,+919365367627,c116@email.com,Pune,135197,mid,moderate,26-35,7,"[""mutual_fund"", ""fd"", ""home_loan""]",2021-09-01
+C117,Client C117,1972-05-15,+918138695188,c117@email.com,Kolkata,219006,low,conservative,36-45,8,"[""forex_card"", ""insurance"", ""savings_account"", ""credit_card""]",2022-03-01
+C118,Client C118,1961-01-18,+917605024708,c118@email.com,Surat,257105,ultra-high,aggressive,18-25,5,"[""fd"", ""insurance"", ""debit_card"", ""personal_loan""]",2022-12-01
+C119,Client C119,1988-05-03,+917808843873,c119@email.com,Mumbai,268387,mid,moderate,18-25,5,"[""debit_card""]",2023-05-01

@@ -1,0 +1,60 @@
+# Core
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-dotenv==1.0.1
+pydantic==2.7.4
+pydantic-settings==2.2.1
+
+# LangChain — pinned for Python 3.12 compatibility
+langchain==0.2.16
+langchain-openai==0.1.23
+langchain-community==0.2.16
+langchain-core==0.2.38
+langsmith==0.1.120
+langchain-groq==0.1.9   # Groq fallback provider
+sentence-transformers==2.7.0  # Embedding fallback (no OpenAI key needed)
+
+# OpenAI
+openai==1.40.0
+
+# Vector Store
+faiss-cpu==1.8.0
+
+# Database
+sqlalchemy==2.0.30
+aiosqlite==0.20.0
+alembic==1.13.1
+
+# Data Processing
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.0
+scipy==1.13.1
+
+# Record Linkage
+recordlinkage==0.16
+
+# NLP / Text Processing
+tiktoken==0.7.0
+
+# Scheduling
+apscheduler==3.10.4
+
+# HTTP
+httpx==0.27.0
+aiohttp==3.9.5
+
+# Frontend
+streamlit==1.35.0
+plotly==5.22.0
+
+# Dev / Eval
+pytest==8.2.1
+pytest-asyncio==0.23.7
+
+# Logging
+structlog==24.2.0
+
+# Optional Pinecone
+# pinecone-client==3.2.2
+# langchain-pinecone==0.1.1
