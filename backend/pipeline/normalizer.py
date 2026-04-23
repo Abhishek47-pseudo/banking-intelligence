@@ -25,6 +25,20 @@ WEIGHTS = {
     "product": 0.10,
 }
 
+# ── Explicit thresholds / bounds ──────────────────────────────────────────────
+# Keep these centralized so behavior is consistent and tunable.
+INCOME_INFER_THRESHOLDS = (
+    (150_000, "ultra-high"),
+    (75_000, "high"),
+    (30_000, "mid"),
+)
+MONTHLY_SPEND_MAX = 10_000_000
+AVG_TXN_MAX = 10_000_000.0
+
+# Borderline logging: if spend is close to a threshold, emit a log so behavior
+# is explainable when clients sit near a boundary.
+THRESHOLD_BORDERLINE_PCT = 0.05  # within 5%
+
 
 class Client360Profile(BaseModel):
     client_id: str
@@ -71,15 +85,26 @@ def _resolve_income_band(
         return crm.income_band, crm.income_source
     if tx and tx.monthly_spend:
         spend = tx.monthly_spend
-        if spend > 150000:
-            band = "ultra-high"
-        elif spend > 75000:
-            band = "high"
-        elif spend > 30000:
-            band = "mid"
-        else:
-            band = "low"
-        log.info(f"income_band inferred from transaction: {band}")
+        band = "low"
+        for threshold, label in INCOME_INFER_THRESHOLDS:
+            if spend > threshold:
+                band = label
+                break
+
+        # Borderline threshold logging
+        for threshold, label in INCOME_INFER_THRESHOLDS:
+            if threshold <= 0:
+                continue
+            if abs(spend - threshold) / threshold <= THRESHOLD_BORDERLINE_PCT:
+                log.warning(
+                    "income_band_borderline",
+                    monthly_spend=spend,
+                    threshold=threshold,
+                    inferred_band=band,
+                )
+                break
+
+        log.info("income_band_inferred_from_transaction", inferred_band=band, monthly_spend=spend)
         return band, "transaction_inferred"
     return "unknown", "default"
 
@@ -107,6 +132,41 @@ def _weighted_confidence(
     return round(score, 3)
 
 
+def _clamp_int(v: Any, *, lo: int = 0, hi: int = MONTHLY_SPEND_MAX) -> int:
+    try:
+        iv = int(v)
+    except Exception:
+        return lo
+    return max(lo, min(hi, iv))
+
+
+def _clamp_float(v: Any, *, lo: float = 0.0, hi: float = AVG_TXN_MAX) -> float:
+    try:
+        fv = float(v)
+    except Exception:
+        return lo
+    return max(lo, min(hi, fv))
+
+
+def _consistency_checks(
+    *,
+    income_band: Optional[str],
+    monthly_spend: Optional[int],
+    churn_risk: Optional[bool],
+    sentiment: Optional[str],
+) -> List[str]:
+    """
+    Detect contradictions across signals. Returns list of issues.
+    Conservative: only flags clear/likely contradictions.
+    """
+    issues: List[str] = []
+    if income_band in ("low", "unknown") and monthly_spend is not None and monthly_spend >= 200_000:
+        issues.append("low_income_vs_high_spend")
+    if churn_risk and (sentiment or "").lower() in ("positive", "very_positive"):
+        issues.append("churn_risk_vs_positive_sentiment")
+    return issues
+
+
 def normalize(pipeline_result: PipelineResult) -> Client360Profile:
     """
     Merge all 4 agent outputs into a Client 360 Profile applying source priority rules.
@@ -115,6 +175,17 @@ def normalize(pipeline_result: PipelineResult) -> Client360Profile:
     crm = pipeline_result.crm
     interaction = pipeline_result.interaction
     product = pipeline_result.product
+
+    # Validate stage outputs (safe defaults + warnings)
+    if tx:
+        if tx.monthly_spend is None or tx.monthly_spend < 0:
+            log.warning("default_applied", field="monthly_spend", reason="missing_or_negative")
+        if tx.avg_txn_size is not None and tx.avg_txn_size < 0:
+            log.warning("default_applied", field="avg_txn_size", reason="negative")
+    if crm and crm.products_held is None:
+        log.warning("default_applied", field="products_held", reason="missing")
+    if interaction and interaction.signal_quality is None:
+        log.warning("default_applied", field="signal_quality", reason="missing")
 
     income_band, income_source = _resolve_income_band(crm, tx)
     city, city_source = _resolve_city(crm)
@@ -127,13 +198,29 @@ def normalize(pipeline_result: PipelineResult) -> Client360Profile:
 
     confidence = _weighted_confidence(tx, crm, interaction, product)
 
+    # Numeric sanity bounds before propagating further downstream
+    monthly_spend = _clamp_int(tx.monthly_spend if tx else 0) if tx else None
+    avg_txn_size = _clamp_float(tx.avg_txn_size if tx else 0.0) if tx else None
+
+    # Consistency checks: contradictions reduce effective confidence slightly
+    issues = _consistency_checks(
+        income_band=income_band,
+        monthly_spend=monthly_spend,
+        churn_risk=interaction.churn_risk if interaction else None,
+        sentiment=interaction.sentiment if interaction else None,
+    )
+    if issues:
+        log.warning("signal_inconsistency_detected", issues=issues, client_id=pipeline_result.client_id)
+        # Conservative adjustment: keep minimal and explainable
+        confidence = round(max(0.0, confidence - 0.05 * min(len(issues), 2)), 3)
+
     return Client360Profile(
         client_id=pipeline_result.client_id,
         # Financial
-        monthly_spend=tx.monthly_spend if tx else None,
+        monthly_spend=monthly_spend,
         top_categories=tx.top_categories if tx else None,
         international_usage=tx.international_usage if tx else None,
-        avg_txn_size=tx.avg_txn_size if tx else None,
+        avg_txn_size=avg_txn_size,
         spend_trend=tx.spend_trend if tx else None,
         anomalies_flagged=tx.anomalies_flagged if tx else None,
         # CRM

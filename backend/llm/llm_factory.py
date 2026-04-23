@@ -44,10 +44,11 @@ except Exception:
     _USAGE_CALLBACKS = []
 
 # ── Provider constants ────────────────────────────────────────────────────────
+# Allow overrides via env vars for easier debugging / cost control.
 
-OPENAI_MODEL = "gpt-4o"
-GROQ_MODEL   = "llama-3.3-70b-versatile"   # best general Groq model
-TEMPERATURE  = 0.2
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")  # best general Groq model
+TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.2"))
 
 
 def _has_key(env_var: str) -> bool:

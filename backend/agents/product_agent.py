@@ -14,6 +14,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from backend.llm.llm_factory import get_llm
 from backend.observability.usage_logger import get_usage_callbacks, record_tool_steps
+from backend.utils.safe_json import safe_json_loads
 
 
 # ── Output Schemas ────────────────────────────────────────────────────────────
@@ -234,9 +235,7 @@ async def run_product_agent(
     )
     record_tool_steps("product_agent", result.get("intermediate_steps"))
     raw = result.get("output", "{}")
-    import re
-    match = re.search(r'\{.*\}', raw, re.DOTALL)
-    data = json.loads(match.group()) if match else {}
+    data = safe_json_loads(raw, default={}, context="product_agent.output")
 
     gaps = data.get("product_gaps", data.get("scored_gaps", []))
     n_similar = int(data.get("similar_client_count", data.get("similar_count", 0)))

@@ -10,11 +10,13 @@ and degrades gracefully when providers don't return token metadata.
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import structlog
@@ -112,6 +114,61 @@ def reset_usage() -> None:
 
 def get_usage_snapshot() -> UsageSnapshot:
     return _snapshot
+
+
+def _counters_to_dict(c: _Counters) -> Dict[str, Any]:
+    return {
+        "llm_calls": c.llm_calls,
+        "tool_calls": c.tool_calls,
+        "prompt_tokens": c.prompt_tokens,
+        "completion_tokens": c.completion_tokens,
+        "total_tokens": c.total_tokens,
+        "attempted_tokens": c.attempted_tokens,
+        "last_rate_limit_refresh_at": c.last_rate_limit_refresh_at,
+        "last_rate_limit_wait": c.last_rate_limit_wait,
+    }
+
+
+def usage_snapshot_to_dict(snapshot: Optional[UsageSnapshot] = None) -> Dict[str, Any]:
+    """
+    Convert the current snapshot into JSON-serializable data.
+
+    Intended for persisting a history of runs over time.
+    """
+    snap = snapshot or _snapshot
+    return {
+        "by_agent": {k: _counters_to_dict(v) for k, v in snap.by_agent.items()},
+        "by_tool": {k: _counters_to_dict(v) for k, v in snap.by_tool.items()},
+    }
+
+
+def append_usage_history_jsonl(
+    path: str | Path = "data/usage/usage_history.jsonl",
+    *,
+    agent: Optional[str] = None,
+    run_name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    snapshot: Optional[UsageSnapshot] = None,
+) -> Path:
+    """
+    Append one line of JSON to a JSONL history file.
+
+    Each line is a standalone record so you can easily diff/plot over time.
+    """
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+
+    record: Dict[str, Any] = {
+        "ts_utc": datetime.now(timezone.utc).isoformat(),
+        "agent": agent,
+        "run_name": run_name,
+        "usage": usage_snapshot_to_dict(snapshot),
+    }
+    if metadata:
+        record["metadata"] = metadata
+
+    p.open("a", encoding="utf-8").write(json.dumps(record, ensure_ascii=False) + "\n")
+    return p
 
 
 def record_tool_steps(agent: str, intermediate_steps: Any) -> None:

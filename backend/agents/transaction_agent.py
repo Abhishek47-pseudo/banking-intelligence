@@ -15,6 +15,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from backend.llm.llm_factory import get_llm
 from backend.observability.usage_logger import get_usage_callbacks, record_tool_steps
+from backend.utils.safe_json import safe_json_loads
 
 
 # ── Output Schema ─────────────────────────────────────────────────────────────
@@ -211,20 +212,28 @@ async def run_transaction_agent(client_id: str, llm: Optional[BaseChatModel] = N
     )
     record_tool_steps("transaction_agent", result.get("intermediate_steps"))
     raw = result.get("output", "{}")
-    # Parse JSON from LLM output
-    import re
-    match = re.search(r'\{.*\}', raw, re.DOTALL)
-    if match:
-        data = json.loads(match.group())
-    else:
-        data = {}
+    # Parse JSON from LLM output (robust to extra text/formatting noise)
+    data = safe_json_loads(raw, default={}, context="transaction_agent.output")
 
     months = data.get("unique_months", data.get("months_of_data", 0))
+    # Sanity bounds (avoid propagating unrealistic numbers)
+    monthly_spend = int(data.get("monthly_avg_spend", data.get("monthly_spend", 0)) or 0)
+    if monthly_spend < 0:
+        monthly_spend = 0
+    if monthly_spend > 10_000_000:
+        monthly_spend = 10_000_000
+
+    avg_txn = float(data.get("avg_txn_size", 0.0) or 0.0)
+    if avg_txn < 0:
+        avg_txn = 0.0
+    if avg_txn > 10_000_000:
+        avg_txn = 10_000_000.0
+
     return TransactionOutput(
-        monthly_spend=int(data.get("monthly_avg_spend", data.get("monthly_spend", 0))),
+        monthly_spend=monthly_spend,
         top_categories=data.get("top_categories", []),
         international_usage=bool(data.get("international_usage", False)),
-        avg_txn_size=float(data.get("avg_txn_size", 0.0)),
+        avg_txn_size=avg_txn,
         spend_trend=data.get("spend_trend", "stable"),
         anomalies_flagged=data.get("anomalies_flagged", []),
         confidence_score=_compute_confidence(months),

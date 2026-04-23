@@ -23,6 +23,7 @@ log = structlog.get_logger(__name__)
 MAX_RETRIES = 3
 AGENT_TIMEOUT = 30.0  # seconds
 BACKOFF_BASE = 2.0
+CURRENT_PROFILE_SPEND_MAX = 10_000_000  # sanity bound for downstream similarity
 
 
 @dataclass
@@ -117,18 +118,37 @@ async def run_pipeline(client_id: str, llm: Optional[BaseChatModel] = None) -> P
     current_profile = {}
     if tx_result.success and tx_result.output:
         tx: TransactionOutput = tx_result.output
+        monthly_spend = int(tx.monthly_spend or 0)
+        if monthly_spend < 0:
+            log.warning("default_applied", field="monthly_spend", reason="negative", agent="transaction_agent")
+            monthly_spend = 0
+        if monthly_spend > CURRENT_PROFILE_SPEND_MAX:
+            log.warning(
+                "value_clamped",
+                field="monthly_spend",
+                value=monthly_spend,
+                max=CURRENT_PROFILE_SPEND_MAX,
+                agent="transaction_agent",
+            )
+            monthly_spend = CURRENT_PROFILE_SPEND_MAX
         current_profile.update({
             "client_id": client_id,
-            "monthly_spend": tx.monthly_spend,
+            "monthly_spend": monthly_spend,
             "international_usage": tx.international_usage,
             "top_categories": tx.top_categories,
         })
     if crm_result.success and crm_result.output:
         crm: CRMOutput = crm_result.output
+        products = crm.products_held if isinstance(crm.products_held, list) else []
+        if not isinstance(crm.products_held, list):
+            log.warning("default_applied", field="current_products", reason="malformed", agent="crm_agent")
         current_profile.update({
             "income_band": crm.income_band,
-            "current_products": crm.products_held,
+            "current_products": products,
         })
+    if not current_profile:
+        # Partial failures: keep pipeline moving but warn explicitly.
+        log.warning("product_agent_inputs_missing", client_id=client_id, note="No upstream signals available")
 
     # Phase 2: Product agent (depends on other agents' outputs for similarity)
     prod_result = await _run_with_retry(

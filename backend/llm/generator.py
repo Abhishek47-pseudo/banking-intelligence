@@ -16,6 +16,11 @@ from pydantic import BaseModel
 
 from backend.llm.prompts import RECOMMENDATION_PROMPT
 from backend.llm.llm_factory import get_llm          # ← factory import
+from backend.utils.safe_json import safe_json_loads
+from backend.pipeline.confidence import (
+    LOW_CONFIDENCE_WARN,
+    should_suppress_recommendations,
+)
 
 log = logging.getLogger(__name__)
 
@@ -65,8 +70,23 @@ async def generate_recommendations(
     chain = _build_chain(llm)
     low_confidence_note = (
         "Data confidence is below 60%. Treat recommendations as indicative."
-        if confidence_score < 0.6 else ""
+        if confidence_score < LOW_CONFIDENCE_WARN else ""
     )
+    if should_suppress_recommendations(confidence_score):
+        return RecommendationOutput(
+            briefing=(
+                "Insufficient reliable signals to generate product recommendations. "
+                "Please verify client data and re-run ingestion. "
+                + ((" " + low_confidence_note) if low_confidence_note else "")
+            ),
+            recommendations=[],
+            talking_points=[
+                "Confirm income band and recent transaction activity.",
+                "Collect updated interaction notes (goals, timelines, risk appetite).",
+            ],
+            confidence_score=confidence_score,
+            recommendation_id=str(uuid.uuid4()),
+        )
 
     try:
         raw_output = await chain.ainvoke({
@@ -76,12 +96,9 @@ async def generate_recommendations(
             "low_confidence_note": low_confidence_note,
         })
 
-        # Extract JSON block from response
-        match = re.search(r'\{.*\}', raw_output, re.DOTALL)
-        if not match:
-            raise ValueError("No JSON found in LLM response")
-
-        data = json.loads(match.group())
+        data = safe_json_loads(raw_output, default=None, context="generator.recommendations")
+        if not isinstance(data, dict):
+            raise ValueError("No valid JSON object found in LLM response")
         recs = [
             RecommendationItem(
                 product=r.get("product", ""),
@@ -92,6 +109,12 @@ async def generate_recommendations(
             for r in data.get("recommendations", [])[:3]
         ]
 
+        log.info(
+            "recommendations_generated",
+            confidence_score=confidence_score,
+            count=len(recs),
+            low_confidence=confidence_score < LOW_CONFIDENCE_WARN,
+        )
         return RecommendationOutput(
             briefing=data.get("briefing", ""),
             recommendations=recs,

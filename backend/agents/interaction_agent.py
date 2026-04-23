@@ -4,6 +4,7 @@ Processes relationship manager notes, emails, and call logs.
 """
 
 import os, json, re
+import difflib
 from typing import List, Optional, Dict, Any
 import pandas as pd
 from pydantic import BaseModel
@@ -15,6 +16,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from backend.llm.llm_factory import get_llm
 from backend.llm.prompts import INTERACTION_EXTRACTION_PROMPT
 from backend.observability.usage_logger import get_usage_callbacks, record_tool_steps
+from backend.utils.safe_json import safe_json_loads
 
 # ── Output Schemas ────────────────────────────────────────────────────────────
 
@@ -89,6 +91,13 @@ def preprocess_text(interactions_json: str) -> str:
     records = json.loads(interactions_json)
     processed = []
     seen_notes: List[str] = []
+    dropped = 0
+
+    def _normalize_note(s: str) -> str:
+        s = s.lower().strip()
+        s = re.sub(r"\s+", " ", s)
+        s = re.sub(r"[^\w\s\[\]@.-]", "", s)  # keep simple punctuation
+        return s
 
     for r in records:
         note = str(r.get("notes", ""))
@@ -96,20 +105,25 @@ def preprocess_text(interactions_json: str) -> str:
         for pattern in _PII_PATTERNS:
             note = re.sub(pattern, "[REDACTED]", note)
         # Simple deduplication: skip if very similar to a seen note
+        cleaned = _normalize_note(note)
         is_dup = False
         for seen in seen_notes:
-            # Basic char-level overlap ratio
-            shorter = min(len(note), len(seen))
-            if shorter > 0:
-                overlap = sum(a == b for a, b in zip(note[:shorter], seen[:shorter]))
-                if overlap / shorter > 0.95:
-                    is_dup = True
-                    break
+            ratio = difflib.SequenceMatcher(None, cleaned, seen).ratio()
+            if ratio >= 0.92:
+                is_dup = True
+                break
         if not is_dup:
-            seen_notes.append(note)
+            seen_notes.append(cleaned)
             r["cleaned_notes"] = note
             processed.append(r)
+        else:
+            dropped += 1
 
+    if dropped:
+        # Tool-level logging isn't guaranteed; encode a small hint in output metadata.
+        # Downstream agent will still be able to proceed deterministically.
+        for r in processed[:1]:
+            r["_dedup_dropped"] = dropped
     return json.dumps(processed)
 
 
@@ -146,27 +160,16 @@ def extract_signals(processed_json: str, raw_notes_combined: str = "") -> str:
 @tool
 def validate_output(llm_response: str) -> str:
     """Validate LLM JSON extraction output. Retry with defaults on failure."""
-    try:
-        data = json.loads(llm_response)
-        required = ["summary", "sentiment", "intents", "life_events",
-                    "churn_risk", "signal_quality"]
-        for field in required:
-            if field not in data:
-                data[field] = [] if "intents" in field or "events" in field else (
-                    "neutral" if field == "sentiment" else
-                    ("none" if field == "signal_quality" else
-                     ("No summary available." if field == "summary" else False))
-                )
-        return json.dumps(data)
-    except json.JSONDecodeError:
-        return json.dumps({
-            "summary": "Unable to parse interaction signals.",
-            "sentiment": "neutral",
-            "intents": [],
-            "life_events": [],
-            "churn_risk": False,
-            "signal_quality": "none",
-        })
+    data = safe_json_loads(llm_response, default={}, context="interaction_agent.validate_output")
+    required = ["summary", "sentiment", "intents", "life_events", "churn_risk", "signal_quality"]
+    for field in required:
+        if field not in data:
+            data[field] = [] if field in ("intents", "life_events") else (
+                "neutral" if field == "sentiment" else
+                ("none" if field == "signal_quality" else
+                 ("No summary available." if field == "summary" else False))
+            )
+    return json.dumps(data)
 
 
 # ── Agent Factory ─────────────────────────────────────────────────────────────
@@ -210,8 +213,7 @@ async def run_interaction_agent(client_id: str, llm: Optional[BaseChatModel] = N
     )
     record_tool_steps("interaction_agent", result.get("intermediate_steps"))
     raw = result.get("output", "{}")
-    match = re.search(r'\{.*\}', raw, re.DOTALL)
-    data = json.loads(match.group()) if match else {}
+    data = safe_json_loads(raw, default={}, context="interaction_agent.output")
 
     sq = data.get("signal_quality", "none")
     return InteractionOutput(

@@ -15,6 +15,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from backend.llm.llm_factory import get_llm
 from backend.observability.usage_logger import get_usage_callbacks, record_tool_steps
+from backend.utils.safe_json import safe_json_loads
 
 
 # ── Output Schema ─────────────────────────────────────────────────────────────
@@ -84,7 +85,22 @@ def load_crm_record(client_id: str) -> str:
 @tool
 def standardize_fields(record_json: str) -> str:
     """Normalize income to rupees, phone format, dates to ISO-8601, bucket income bands."""
-    record = json.loads(record_json)
+    # Be defensive: if a weaker model passes non-JSON (e.g. "load_crm_record(...)")
+    # try to recover rather than crashing the whole agent run.
+    try:
+        record = json.loads(record_json)
+    except Exception:
+        # Try to extract an embedded JSON object.
+        m = re.search(r"\{.*\}", str(record_json), re.DOTALL)
+        if m:
+            record = json.loads(m.group())
+        else:
+            # If it looks like a tool call string, try to re-load using the client_id.
+            m_id = re.search(r"client_id\s*=\s*'([^']+)'", str(record_json))
+            if m_id:
+                record = json.loads(load_crm_record(m_id.group(1)))
+            else:
+                return json.dumps({"error": "standardize_fields_expected_json", "raw": str(record_json)})
 
     # Normalize income_band
     raw_band = str(record.get("income_band", "")).lower().strip()
@@ -193,6 +209,8 @@ def build_crm_agent(llm: BaseChatModel) -> AgentExecutor:
          "You are a CRM data quality agent for a bank. "
          "Use tools in order: load_crm_record → standardize_fields → infer_missing → "
          "flag_stale_fields → resolve_duplicates. "
+         "When calling a tool that expects JSON, pass the EXACT JSON string returned "
+         "by the previous tool (not a paraphrase, not a function call string). "
          "Return a JSON object with all CRMOutput fields."),
         MessagesPlaceholder("chat_history", optional=True),
         ("human", "{input}"),
@@ -218,9 +236,7 @@ async def run_crm_agent(client_id: str, llm: Optional[BaseChatModel] = None) -> 
     )
     record_tool_steps("crm_agent", result.get("intermediate_steps"))
     raw = result.get("output", "{}")
-    import re as _re
-    match = _re.search(r'\{.*\}', raw, _re.DOTALL)
-    data = json.loads(match.group()) if match else {}
+    data = safe_json_loads(raw, default={}, context="crm_agent.output")
 
     stale = data.get("stale_fields", [])
     inferred = data.get("city_source", "") == "pin_inferred"
